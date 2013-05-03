@@ -1,0 +1,326 @@
+#!/bin/bash
+# raykroeker@gmail.com
+# ${HOME}
+# ├── ${LOCALENVIRONMENT_HOST}
+# └── ${LOCALENVIRONMENT_HOSTUSER}
+# ${REDSHELL_ROOT}
+# ├── ${REDSHELL_SOURCE}
+# ├── ${REDSHELL_MODULEROOT}
+# │  ├── env
+# │  ├── net
+# │  ├── sft
+# │  └── src
+case "${BASH_VERSINFO[0]}" in
+	4)
+	;;
+	*)
+		log_error "unsupported version of bash:requires +4"
+		return 1
+	;;
+esac
+
+REDSHELL_NAME="redshell"
+
+unset REDSHELL_OSBINARIES
+declare -Ag REDSHELL_OSBINARIES
+
+unset OS_APPLICATIONS
+declare -Ag OS_APPLICATIONS
+
+unset OS_APPLICATION_OPTS
+declare -Ag OS_APPLICATION_OPTS
+
+
+OS=`uname -s`
+case "$OS" in
+	Darwin)
+		OS_APPLICATIONS[tail]=`which tail`
+		OS_APPLICATIONS[edit]=`which open`
+		OS_APPLICATIONS[open]=`which open`
+		OS_APPLICATIONS[sha1]=`which shasum`
+	;;
+	Linux)
+		REDSHELL_OSBINARIES[browser]=`which firefox`
+		OS_APPLICATIONS[tail]=`which tail`
+		OS_APPLICATIONS[edit]=`which editor`
+		OS_APPLICATIONS[open]=`which gvfs-open`
+		OS_APPLICATIONS[sha1]=`which sha1sum`
+	;;
+	*)
+		log_error "unsupported os:$OS"
+		return 1
+	;;
+esac
+
+WORKSPACE_ROOT=$HOME/Workspace
+REDSHELL_WORKSPACEROOT=$WORKSPACE_ROOT
+WORKSPACE_MODULES="notes"
+
+declare -Ag LOG_LEVEL
+LOG_LEVEL[debug]=false
+LOG_LEVEL[error]=true
+LOG_LEVEL[info]=true
+LOG_LEVEL[warn]=true
+LOG_FILE="$HOME/.redshell_log"
+
+function log() {
+	echo -e "[$@]" 1>>$LOG_FILE 2>&1
+	echo -e "[$@]"
+}
+
+function log_debug() {
+	if [[ -n "${LOG_LEVEL[debug]}" && "true" == "${LOG_LEVEL[debug]}" ]]; then
+		echo -e "[DEBUG] [$@]" 1>>$LOG_FILE 2>&1
+	fi
+}
+
+function log_error() {
+	if [[ -n "${LOG_LEVEL[error]}" && "true" == "${LOG_LEVEL[error]}" ]]; then
+		echo -e "[ERROR] [$@]" 1>>$LOG_FILE 2>&1
+	fi
+}
+
+function log_info() {
+	if [[ -n "${LOG_LEVEL[info]}" && "true" == "${LOG_LEVEL[info]}" ]]; then
+		echo -e "[INFO] [$@]" 1>>$LOG_FILE 2>&1
+	fi
+}
+
+function log_warn() {
+	if [[ -n "${LOG_LEVEL[warn]}" && "true" == "${LOG_LEVEL[warn]}" ]]; then
+		echo -e "[WARN] [$@]" 1>>$LOG_FILE 2>&1
+	fi
+}
+
+# log the current date/time
+# $1 = named format [file,iso,iso-date,iso-seconds,iso-nano,web,default]
+function echo_timestamp() {
+	ET_FORMAT_IN=$1
+	if [ -z "$ET_FORMAT_IN" ]; then
+		ET_FORMAT_IN="default"
+	fi
+	case $ET_FORMAT_IN in
+		file)
+			ET_FORMAT="+%Y%m%d_%H%M%S"
+		;;
+		iso|iso-date)
+			ET_FORMAT="--rfc-3339=date"
+		;;
+		iso-seconds)
+			ET_FORMAT="--rfc-3339=seconds"
+		;;
+		iso-nano)
+			ET_FORMAT="--rfc-3339=ns"
+		;;
+		web)
+			ET_FORMAT="--rfc-2822"
+		;;
+		default|*)
+			ET_FORMAT="+%Y-%m-%d %H:%M:%S"
+		;;
+	esac
+	ET_TIMESTAMP=`date "$ET_FORMAT"`
+	log_debug "echo timestamp" "format=$ET_FORMAT"
+	log "$ET_TIMESTAMP"
+}
+
+# tail a list of files; parse the arguments until a non-file is found; then
+# pass the list of files as well as all remaining arguments to tail
+function tail_files() {
+	TF_FILES=$1
+	if [ -z "$TF_FILES" ]; then
+		log_warn "tail files" "file is not specified"
+		return
+	fi
+	shift
+	# include all files
+	while [[ -n "$1" && -e "$1" ]]
+	do
+		TF_FILES="$TF_FILES $1"
+		shift
+	done
+	tail $@ "$TF_FILES"
+}
+
+# edit a list of files; parse the arguments until a non-file is found; then
+# pass the list of files as well as all remaining arguments to a system file
+# editor
+function edit_files() {
+	EF_FILES=$1
+	if [ -z "$EF_FILES" ]; then
+		log_warn "edit files" "file is not specified"
+		return
+	fi
+	shift
+	while [[ -n "$1" && -e "$1" ]]
+	do
+		EF_FILES="$EF_FILES $1"
+		shift
+	done
+	APP=${OS_APPLICATIONS[edit]}
+	APP_OPTS=${OS_APPLICATION_OPTS[edit]}
+	if [ -z "$APP_OPTS"]; then
+		$APP $@ $EF_FILES
+	else
+		$APP $APP_OPTS $@ $EF_FILES
+	fi
+}
+
+# hash a file
+function hash_file() {
+	HFI_IN=$1
+	if [ -z "$HFI_IN" ]; then
+		log_error "hash file" "no file specified"
+		return 1
+	fi
+	HFI_OUT=$2
+	if [ -z "$HFI_OUT" ]; then
+		HFI_HASH=`sha1sum "$HFI_IN"`
+		log_info "hash file" "$HFI_HASH"
+	else
+		sha1sum "$HFI_IN" >> "$HFI_OUT"
+	fi
+}
+
+# hash a folder, this includes a listing of all files and folders within the
+# root as well as a hash of all files in the root
+function hash_folder() {
+	HFO_ROOT=${1%/}
+	if [ -z "$HFO_ROOT" ]; then
+		log_warn "hash folder" "folder is not specified"
+		return
+	fi
+	if [[ ! -e "$HFO_ROOT" || ! -d "$HFO_ROOT" ]]; then
+		log_warn "hash folder" "folder is not a folder or does not exist"
+		return
+	fi
+	HFO_HASH=/tmp/$USER-hash
+	if [ -e "$HFO_HASH" ]; then
+		rm "$HFO_HASH"
+	fi
+	HFO_INDEX=/tmp/$USER-hash-index
+	if [ -e "$HFO_INDEX" ]; then
+		rm "$HFO_INDEX"
+	fi
+	log_info "hash folder" "root=$HFO_ROOT" "index=$HFO_INDEX" "hash=$HFO_HASH"
+	HFO_FILES=/tmp/$USER-hash-files
+	find "$HFO_ROOT" -print > "$HFO_FILES"
+	while read line
+	do
+		if [ -f "$line" ]; then
+			hash_file "$line" "$HFO_INDEX"
+		elif [ -d "$line" ]; then
+			echo "$line" >> "$HFO_INDEX"
+		else
+			log_error "hash folder" "cannot hash file $line"
+		fi
+	done < "$HFO_FILES"
+	sed -i "s:$HFO_ROOT:.:g" "$HFO_INDEX"
+	HFO_INDEX_ORDERED="$HFO_INDEX-ordered"
+	sort "$HFO_INDEX" > "$HFO_INDEX_ORDERED"
+	mv "$HFO_INDEX_ORDERED" "$HFO_INDEX"
+	hash_file "$HFO_INDEX"
+	hash_file "$HFO_INDEX" "$HFO_HASH"
+}
+
+# invoke a web search
+function web_search() {
+	WS_QUERYSTRING=$1
+	if [ -z "$WS_QUERYSTRING" ]; then
+		log_warn "web search" "unspecified query string"
+		return 1
+	fi
+	# append all arguments
+	shift
+	while [ -n "$1" ]
+	do
+		WS_QUERYSTRING="$WS_QUERYSTRING $1"
+		shift
+	done
+	"${REDSHELL_OSBINARIES[browser]}" -search "$WS_QUERYSTRING"
+}
+
+# source redshell
+function redshell() {
+	source "$REDSHELL_SOURCE"
+}
+
+# initialize redshell
+#   source local redshell scripts if they exist
+function redshell_init() {
+	log "$REDSHELL_NAME init"
+	# determine shell filename for reload
+	if [[ "$BASH_SOURCE" == /* ]]; then
+		REDSHELL_SOURCE="$BASH_SOURCE"
+	else
+		REDSHELL_SOURCE="$PWD/$BASH_SOURCE"
+	fi
+	REDSHELL_ROOT=`dirname $REDSHELL_SOURCE`
+	# load workspace root
+	if [ ! -e "$WORKSPACE_ROOT" ]; then
+		mkdir -p "$WORKSPACE_ROOT"
+	fi
+
+	# load modules; to specify a root directory from which to load;
+	# export REDSHELL_MODULEROOT in your environment
+	if [ ! -e "$REDSHELL_MODULEROOT" ]; then
+		REDSHELL_MODULEROOT="$HOME"/."$REDSHELL_NAME"_mod
+	fi
+	if [ -e "$REDSHELL_MODULEROOT" ]; then
+		for m in `ls $REDSHELL_MODULEROOT`
+		do
+			RI_MODULE="$REDSHELL_MODULEROOT/$m"
+			log "redshell init" "loading module" "$RI_MODULE"
+			source "$RI_MODULE"
+			if [ -e "$REDSHELL_MODULES" ]; then
+				REDSHELL_MODULES="$REDSHELL_MODULES $m"
+			else
+				REDSHELL_MODULES="$m"
+			fi
+		done
+	fi
+
+	# load configurations; to specify a root directory from which to load;
+	# export REDSHELL_CONFIGROOT in your environment
+	if [ -z "$REDSHELL_CONFIGROOT" ]; then
+		REDSHELL_CONFIGROOT="$HOME"/."$REDSHELL_NAME"_etc
+	fi
+	if [ -e "$REDSHELL_CONFIGROOT" ]; then
+		local ri_l
+		for ri_l in `ls $REDSHELL_CONFIGROOT`
+		do
+			local RI_CONFIG="$REDSHELL_CONFIGROOT/$ri_l"
+			log "redshell init" "loading config" "$RI_CONFIG"
+			source "$RI_CONFIG"
+		done
+	fi
+
+	for m in $WORKSPACE_MODULES
+	do
+		# each module has a directory + environment that gets loaded
+		DIRECTORY="$HOME/Workspace/$m"
+		if [ ! -e "$DIRECTORY" ]; then
+			log "source" "bootstrap module"
+			mkdir "$DIRECTORY"
+			# todo - bootstrap directory from scm/online folder
+		fi
+	#	source "$HOME/.redshell/$m"
+		source "$HOME/bin/env-workspace-$m"
+	done
+	# install software packages
+	if [ ! -z "$SOFTWARE_KEY" ]; then
+		for sk in $SOFTWARE_KEY
+		do
+			software_install $sk
+		done
+	fi
+	# clone source repositories
+	if [ ! -z "$REDSHELL_SOURCES" ]; then
+		for s in $REDSHELL_SOURCES
+		do
+			src_get $s
+		done
+	fi
+}
+redshell_init
+

@@ -1,0 +1,5 @@
+#!/bin/bash
+
+env_put "HISTCONTROL" "ignoredups:erasedups" "true" # ignore duplicates (don't add); and erase duplicates (go back and rm)
+env_put "HISTSIZE" "1024" "true" # 1K history file
+env_put "HISTTIMEFORMAT" "%Y-%m-%d %H:%M:%S " "true" # include timestamp in history file

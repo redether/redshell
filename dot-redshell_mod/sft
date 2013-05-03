@@ -1,0 +1,371 @@
+#!/bin/bash
+
+# REDSHELL_MODSFT_NAME - module name
+# REDSHELL_MODSFT_ROOT - root directory within which to install software
+REDSHELL_MODSFT_NAME="mod_software"
+REDSHELL_MODSFT_ROOT="$REDSHELL_WORKSPACEROOT/software"
+
+# SOFTWARE_KEY - a space separated list of software keys (ie java-7u9-x64)
+# SOFTWARE_DIGEST - a map of software keys (above) to digest files/strings
+# SOFTWARE_INSTALLROOT - a map of software keys (above) to installation roots
+# SOFTWARE_PACKAGE - a map of software keys (above) to package files
+# SOFTWARE_TYPE - a map of software keys (above) to type strings (ie "tar.gz")
+# SOFTWARE_VERSION - (deb) a version number to install
+unset SOFTWARE_KEY
+declare -Ag SOFTWARE_DIGEST
+declare -Ag SOFTWARE_INSTALLROOT
+declare -Ag SOFTWARE_PACKAGE
+declare -Ag SOFTWARE_TYPE
+declare -Ag SOFTWARE_VERSION
+
+function sft_init() {
+	log "$REDSHELL_NAME $REDSHELL_MODSFT_NAME init"
+	if [ ! -e "$REDSHELL_MODSFT_ROOT" ]; then
+		mkdir "$REDSHELL_MODSFT_ROOT"
+	fi
+}
+
+# register a software package for installation; requires
+# $1 = key
+# $2 = type [deb,tar.gz]
+function sft_put() {
+	software_put $@
+}
+
+function sft_query() {
+	local sq_type="${1}"
+	if [ -z "${sq_type}" ]; then
+		log_warn "software query" "no type specified"
+		return
+	fi
+	shift
+	case "${sq_type}" in
+		binary)
+			log_warn "software query" "unsupported type:#{sq_type}"
+			return
+		;;
+		deb)
+			sft_query_deb $@
+			return
+		;;
+		tar.gz)
+			log_warn "software query" "unsupported type:#{sq_type}"
+			return
+		;;
+		*)
+			log_warn "software query" "unsupported type:#{sq_type}"
+			return
+		;;
+	esac
+}
+
+function sft_query_deb() {
+	local sqd_query="${1}"
+	local sqd_aptquery="apt-cache show ${sqd_query}|grep -E \"Version|SHA1\""
+	log "software query deb" "query=${sqd_aptquery}"
+	local sqd_result="`eval ${sqd_aptquery}`"
+	log "${sqd_result}"
+}
+
+
+function software_put() {
+	local SP_KEY=$1
+	local SP_TYPE=$2
+	log_debug "software put" "key=$SP_KEY" "type=$SP_TYPE"
+	if [ -z "$SP_TYPE" ]; then
+		log_warn "software put" "no type specified" "key=$SP_KEY"
+		return
+	fi
+	case "$SP_TYPE" in
+		binary)
+			software_put_binary $@
+		;;
+		deb)
+			software_put_deb $@
+		;;
+		tar.gz)
+			software_put_targz $@
+		;;
+		*)
+			log_warn "software put:unsupported type:key=$SP_KEY\n\t\ttype=$SP_TYPE"
+			return
+		;;
+	esac
+}
+
+# register a "bin" software package for installation; requires
+# $1 = key
+# $2 = type [deb,tar.gz]
+# $3 = version
+# $4 = digest
+function software_put_binary() {
+	local SPB_KEY=$1
+	local SPB_TYPE=$2
+	local SPB_PACKAGE=$3
+	local SPB_DIGEST=$4
+	local SPB_INSTALLROOT=$5
+
+	if [[ -z "$SPB_PACKAGE" || ! -e "$SPB_PACKAGE" ]]; then
+		log_warn "software put:no package specified or does not exist:key=$STB_KEY\n\t\tpackage=$SPB_PACKAGE"
+		return
+	fi
+	if [[ -z "$SPB_DIGEST" || ! -e "$SPB_DIGEST" ]]; then
+		log_warn "software put:no digest specified or does not exist:key=$SPB_KEY\n\t\tdigest=$SPB_DIGEST"
+		return
+	fi
+	if [ -z "$SPB_INSTALLROOT" ]; then
+		log_warn "software put:no install root specified:key=$SPB_KEY"
+		return
+	fi
+
+	if [ -z "$SOFTWARE_KEY" ]; then
+		SOFTWARE_KEY=$SPB_KEY
+	else
+		SOFTWARE_KEY="$SOFTWARE_KEY $SPB_KEY"
+	fi
+
+	unset SOFTWARE_PACKAGE[$SPB_KEY]
+	SOFTWARE_PACKAGE[$SPB_KEY]=$SPB_PACKAGE
+
+	unset SOFTWARE_DIGEST[$SPB_KEY]
+	SOFTWARE_DIGEST[$SPB_KEY]=$SPB_DIGEST
+
+	unset SOFTWARE_TYPE[$SPB_KEY]
+	SOFTWARE_TYPE[$SPB_KEY]=$SPB_TYPE
+
+	unset SOFTWARE_INSTALLROOT[$SPB_KEY]
+	SOFTWARE_INSTALLROOT[$SPB_KEY]=$SPB_INSTALLROOT
+}
+
+# register a "deb" software package for installation; requires
+# $1 = key
+# $2 = type [deb,tar.gz]
+# $3 = version
+# $4 = digest
+function software_put_deb() {
+	local SPD_KEY=$1
+	local SPD_TYPE=$2
+	local SPD_VERSION=$3
+	local SPD_DIGEST=$4
+
+	if [ -z "$SOFTWARE_KEY" ]; then
+		SOFTWARE_KEY=$SPD_KEY
+	else
+		SOFTWARE_KEY="$SOFTWARE_KEY $SPD_KEY"
+	fi
+
+	unset SOFTWARE_DIGEST[$SPD_KEY]
+	SOFTWARE_DIGEST[$SPD_KEY]=$SPD_DIGEST
+
+	unset SOFTWARE_TYPE[$SPD_KEY]
+	SOFTWARE_TYPE[$SPD_KEY]=$SPD_TYPE
+
+	unset SOFTWARE_VERSION[$SPD_KEY]
+	SOFTWARE_VERSION[$SPD_KEY]=$SPD_VERSION
+}
+
+# register a "tar.gz" software package for installation; requires
+# $1 = key
+# $2 = type [deb,tar.gz]
+# $3 = package
+# $4 = digest
+# $5 = install root
+function software_put_targz() {
+	local SPT_KEY=$1
+	local SPT_TYPE=$2
+	local SPT_PACKAGE=$3
+	local SPT_DIGEST=$4
+	local SPT_INSTALLROOT=$5
+
+	if [[ -z "$SPT_PACKAGE" || ! -e "$SPT_PACKAGE" ]]; then
+		log_warn "software put" "no package specified or does not exist" "key=$SPT_KEY" "package=$SPT_PACKAGE"
+		return 1
+	fi
+	if [[ -z "$SPT_DIGEST" || ! -e "$SPT_DIGEST" ]]; then
+		log_warn "software put" "no digest specified or does not exist" "key=$SPT_KEY" "digest=$SPT_DIGEST"
+		return 1
+	fi
+	if [ -z "$SPT_INSTALLROOT" ]; then
+		log_warn "software put" "no install root specified" "key=$SPT_KEY"
+		return 1
+	fi
+
+	if [ -z "$SOFTWARE_KEY" ]; then
+		SOFTWARE_KEY=$SPT_KEY
+	else
+		SOFTWARE_KEY="$SOFTWARE_KEY $SPT_KEY"
+	fi
+
+	unset SOFTWARE_PACKAGE[$SPT_KEY]
+	SOFTWARE_PACKAGE[$SPT_KEY]=$SPT_PACKAGE
+
+	unset SOFTWARE_DIGEST[$SPT_KEY]
+	SOFTWARE_DIGEST[$SPT_KEY]=$SPT_DIGEST
+
+	unset SOFTWARE_TYPE[$SPT_KEY]
+	SOFTWARE_TYPE[$SPT_KEY]=$SPT_TYPE
+
+	unset SOFTWARE_INSTALLROOT[$SPT_KEY]
+	SOFTWARE_INSTALLROOT[$SPT_KEY]=$SPT_INSTALLROOT
+}
+
+function software_digest() {
+	local SD_KEY=$1
+	local SD_PACKAGE=${SOFTWARE_PACKAGE[$SD_KEY]}
+	local SD_DIGEST=${SOFTWARE_DIGEST[$SD_KEY]}
+	pushd `dirname $SD_PACKAGE` > /dev/null
+	sha1sum -c "$SD_DIGEST" > /dev/null 2>&1
+	popd > /dev/null
+	local RET=$?
+	log_debug "software_digest:key=$SD_KEY\n\t\tdigest=$SD_DIGEST\n\t\tret:$RET"
+	return $RET
+}
+
+# clean software install
+function software_clean() {
+	local SC_KEY=$1
+	local SC_PACKAGE=${SOFTWARE_PACKAGE[$SI_KEY]}
+	local SC_DIGEST=${SOFTWARE_DIGEST[$SI_KEY]}
+	local SC_TYPE=${SOFTWARE_TYPE[$SI_KEY]}
+	local SC_INSTALLROOT=${SOFTWARE_INSTALLROOT[$SI_KEY]}
+	if [ -z "$SC_KEY" ]; then
+		log_warn "software clean" "unspecified key"
+		return 1
+	fi
+	log_debug "software clean:key=$SC_KEY\n\t\tpackage=$SC_PACKAGE\n\t\tdigest=$SC_DIGEST\n\t\tinstall root=$SC_INSTALLROOT"
+	case "$SC_TYPE" in
+		tar.gz)
+		;;
+		*)
+			log_warn "software clean:invalid type:key=$SC_KEY\n\t\ttype=$SC_TYPE"
+			return 2
+		;;
+	esac
+	if [[ "tar.gz" == "$SC_TYPE" && -e "$SC_INSTALLROOT" && -d "$SC_INSTALLROOT" ]]; then
+		rm -rf "$SC_INSTALLROOT"
+	fi
+}
+
+# install a software package
+# $1 = key
+function software_install() {
+	local SI_KEY=$1
+	local SI_TYPE=${SOFTWARE_TYPE[$SI_KEY]}
+	case "$SI_TYPE" in
+		binary)
+			software_install_binary $@
+		;;
+		deb)
+			software_install_deb $@
+		;;
+		tar.gz)
+			software_install_targz $@
+		;;
+		*)
+			log_warn "software install" "invalid type" "key=$SI_KEY" "type=$SI_TYPE"
+			return
+		;;
+	esac
+}
+
+# install a binary software package
+# $1 = key
+function software_install_binary() {
+	local SIB_KEY=$1
+	local SIB_PACKAGE=${SOFTWARE_PACKAGE[$SIB_KEY]}
+	local SIB_DIGEST=${SOFTWARE_DIGEST[$SIB_KEY]}
+	local SIB_TYPE=${SOFTWARE_TYPE[$SIB_KEY]}
+	local SIB_INSTALLROOT=${SOFTWARE_INSTALLROOT[$SIB_KEY]}
+	log_debug "software install binary" "key=$SIB_KEY" "package=$SIB_PACKAGE" "digest=$SIB_DIGEST" "install root=$SIB_INSTALLROOT"
+	if [ -e "$SIB_INSTALLROOT" ]; then
+		log_info "software install binary" "package has already been installed" "key=$SIB_KEY" "install root=$SIB_INSTALLROOT"
+		return
+	fi
+	software_digest $SIB_KEY
+	local RET=$?
+	log_debug "software install binary" "digest ret:$RET"
+	if [ 0 -ne $RET ]; then
+		log_warn "software install binary" "invalid digest:key=$SIB_KEY"
+		return 1
+	fi
+	local SIB_INSTALLPACKAGE="`dirname \"$SIB_INSTALLROOT\"`/`basename $SIB_PACKAGE`"
+	log_debug "software install binary" "install root=$SIB_INSTALLROOT"
+	pushd "`dirname \"$SIB_INSTALLROOT\"`" > /dev/null 2>&1
+	if [ -e "$SIB_INSTALLPACKAGE" ]; then
+		rm -f "$SIB_INSTALLPACKAGE"
+	fi
+	cp "$SIB_PACKAGE" "$SIB_INSTALLPACKAGE"
+	"$SIB_INSTALLPACKAGE"
+	rm "$SIB_INSTALLPACKAGE"
+}
+
+# install a deb software package
+# $1 = key
+function software_install_deb() {
+	local SID_KEY=$1
+	local SID_TYPE=${SOFTWARE_TYPE[$SID_KEY]}
+	local SID_VERSION=${SOFTWARE_VERSION[$SID_KEY]}
+	local SID_DIGEST=${SOFTWARE_DIGEST[$SID_KEY]}
+	log_debug "software install deb" "key=$SID_KEY" "type=$SID_TYPE" "version=$SID_VERSION" "digest=$SID_DIGEST"
+	local SID_STDOUT=`dpkg --get-selections "$SID_KEY" 2>&1 |grep "install"`
+	local SID_RET=$?
+	log_debug "software install deb" "sid std out=$SID_STDOUT" "sid ret=$SID_RET"
+	if [[ 0 -eq $SID_RET && "$SID_KEY" == "$SID_STDOUT" ]]; then
+		# the last "grep for install" above triggers 0 = installed; 1 = not
+		# installed
+		log_info "software install deb" "package has already been installed" "key=$SID_KEY"
+	else
+		if [ -z "$SID_STDOUT" ]; then
+			if [ 0 -eq $EUID ]; then
+				SID_SUDOKILL=false
+			else
+				SID_SUDOKILL=true
+			fi
+			if [ -z "$SID_VERSION" ]; then
+				SID_INSTALL_PKG="$SID_KEY"
+			else
+				SID_INSTALL_PKG="$SID_KEY=$SID_VERSION"
+			fi
+			sudo -k apt-get install --assume-yes "$SID_INSTALL_PKG"
+		else
+			log_warn "software install deb" "cannot determine package status" "key=$SID_KEY"
+			return 1
+		fi
+	fi
+}
+
+# install a targz software package
+# $1 = key
+function software_install_targz() {
+	local SIT_KEY=$1
+	local SIT_PACKAGE=${SOFTWARE_PACKAGE[$SIT_KEY]}
+	local SIT_DIGEST=${SOFTWARE_DIGEST[$SIT_KEY]}
+	local SIT_TYPE=${SOFTWARE_TYPE[$SIT_KEY]}
+	local SIT_INSTALLROOT=${SOFTWARE_INSTALLROOT[$SIT_KEY]}
+	log_debug "software install targz" "key=$SIT_KEY" "package=$SIT_PACKAGE" "digest=$SIT_DIGEST" "install root=$SIT_INSTALLROOT"
+	if [ -e "$SIT_INSTALLROOT" ]; then
+		log_info "software install targz" "package has already been installed" "key=$SIT_KEY" "install root=$SIT_INSTALLROOT"
+		return 1
+	fi
+	software_digest $SI_KEY
+	local RET=$?
+	log_debug "software install targz" "digest ret:$RET"
+	if [ 0 -ne $RET ]; then
+		log_warn "software install targz" "invalid digest:key=$SI_KEY"
+		return 1
+	fi
+	tar -C "$WORKSPACE_ROOT/software" -zxvf "$SIT_PACKAGE"
+}
+
+# reinstall a software package
+function software_reinstall() {
+	software_clean $@
+	local RET=$?
+	if [ 0 -ne $RET ]; then
+		log_warn "software reinstall" "error with clean:$RET"
+		return
+	fi
+	software_install $@
+}
+
+sft_init

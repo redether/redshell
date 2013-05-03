@@ -1,0 +1,20 @@
+#!/bin/bash
+
+# https://help.ubuntu.com/community/CustomizingBashPrompt
+# http://ubuntugenius.wordpress.com/2011/07/11/how-to-change-the-command-line-prompt-colour-in-the-ubuntulinux-terminal/
+# http://www.arwin.net/tech/bash.php
+# http://www.thegeekstuff.com/2008/09/bash-shell-take-control-of-ps1-ps2-ps3-ps4-and-prompt_command/
+env_put "PS_COLOUR_BLUE"   "\[\033[01;34m\]" "true"
+env_put "PS_COLOUR_GREEN"  "\[\033[01;32m\]" "true"
+env_put "PS_COLOUR_GREY"   "\[\033[00;37m\]" "true"
+env_put "PS_COLOUR_RED"    "\[\033[01;31m\]" "true"
+env_put "PS_COLOUR_WHITE"  "\[\033[01;37m\]" "true"
+env_put "PS_COLOUR_YELLOW" "\[\033[01;33m\]" "true"
+
+env_put "PS_COLOUR_RESET" "\[\033[01;0m\]" "true"
+
+# prompt
+env_put "PS1" "${debian_chroot:+($debian_chroot)}$PS_COLOUR_GREY\u$PS_COLOUR_RED at $PS_COLOUR_GREY\h $PS_COLOUR_BLUE\w$PS_COLOUR_GREY $PS_COLOUR_RED\\$ $PS_COLOUR_GREY" "true" # default prompt
+env_put "PS2" "$PS_COLOUR_RED >$PS_COLOUR_RESET " "true" # prompt for continuation command
+env_put "PS3" "" "true" # prompt for select w/in a script
+env_put "PS4" "$PS_COLOUR_RED +$PS_COLOUR_RESET " "true" # prompt for debug output

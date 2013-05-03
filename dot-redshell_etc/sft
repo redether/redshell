@@ -1,0 +1,103 @@
+#!/bin/bash
+
+SOFTWARE_SOURCE=/media/raymond/\<software\>
+SOFTWARE_INSTALL=$WORKSPACE_ROOT/software
+
+sft_put "apache2" "deb" "2.2.22-6ubuntu2.2" "0dbe489a030f114dd0d8737f736e48f07d8f9d32"
+sft_put "bmon" "deb" "2.0.1-3" "801706306be45aa37aae99180358ead5e34eeb15"
+sft_put "cheese" "deb" "3.6*" "1b90c14fdd6b7cbc537f2123a1751ea9aa4b6b6f"
+sft_put "curl" "deb" "7.27*" "d5aad35c1e49e4ae96dde8f3be4348b55728c766"
+sft_put "cvs" "deb" "2:1.12.13*" "b113c1d187777a117e7721f59d21afac4e234e01"
+sft_put "fuseiso" "deb" "20070708-2" "5f694438188c4ecbdc1b597dc170a52009368c3f"
+sft_put "meld" "deb" "1.6*" "ca2e55c996fb9d4469d138197e7a37ea5be71750"
+sft_put "gedit-plugins" "deb" "3.6*" "0cc1cabdf949c703a82a828a1caa3146ea844ec7"
+sft_put "git" "deb" "1:1.7*" "dab3eae9e1f986a38728069d989f80ae75454f9d"
+sft_put "gconf-editor" "deb" "3.0*" "f463357d8a6a292ab20dfe34b60ef9989f7bb0e4"
+sft_put "gimp" "deb" "2.8.2-1ubuntu1" "7a1c69f8ca7b3f6dbeebc95a51b5c8e172b3fb3e"
+sft_put "gnome-nettool" "deb" "3.2*" "483f0df2382a0eb4031939435606d0a6ac478d58"
+sft_put "gparted" "deb" "0.12*" "30f0fa02df8f3b65800859ea2e3eab6a1d9fdecb"
+sft_put "htop" "deb" "htop" "1.0*" "315d1ca6eb420b1749e2cc39c961aeeab857f4a4"
+sft_put "mercurial" "deb" "2.2*" "dec7eeef9313fb5a14edcc7371e20b0838ea6afc"
+sft_put "nfs-common" "deb" "1:1.2*" "09160ca249248ac270524478b08837b216e8a627"
+sft_put "nodejs" "deb" "0.6*" "cd7fa955cab98ebe32b5cff4fbe75e8e39877a05"
+sft_put "nmap" "deb" "6.00-0*" "f992c5d1590b995f4a3017131b2131a92852271b"
+
+sft_put "quicksynergy" "deb" "0.9-1ubuntu1" "cdfb5f623e56eba36f06be089e10ff559c2fbe95"
+sft_put "redshift" "deb" "1.7-2ubuntu1" "5a2479c4b718456f7ede77035bb87abf57e1b47c"
+sft_put "subversion" "deb" "1.7*" "b0f791f05816091e814026ee2487340d1f4daf7d"
+sft_put "synaptic" "deb" "0.75.12build1" "a33fe344719142eb9f467c0df6bd11113ac7d2ac"
+sft_put "tree" "deb" "1.6*" "41af29818eddf7628d08c569a2fc73e449f9b8c3"
+sft_put "tomboy" "deb" "1.12*" "7860095102a76b3adeddfc47f3e7b8b8e2d39344"
+sft_put "wakeonlan" "deb" "0.41*" "7cc057a9220e71ddb18460b07105ec3a166bcf69"
+
+sft_put "ruby" "deb" "4.9" "a7c55fbb83dd8382631ea771b5555d989351f840"
+sft_put "rake" "deb" "0.9.2.2-4" "0a4f15b032090b0f957e45a83ffd4b81cd732dfa"
+
+ANT_VERSION="1.8.4"
+ANT_INSTALL="$SOFTWARE_INSTALL/apache-ant-$ANT_VERSION"
+ANT_SOURCE="$SOFTWARE_SOURCE/apache-ant-$ANT_VERSION-bin.tar.gz"
+sft_put "apache-ant-$ANT_VERSION" "tar.gz" "$ANT_SOURCE" "$ANT_SOURCE.sha1" "$ANT_INSTALL"
+env_put "ANT_HOME" "$ANT_INSTALL"
+env_append "PATH" ":" "$ANT_INSTALL/bin"
+
+DERBY_VERSION="10.9.1.0"
+DERBY_INSTALL="$SOFTWARE_INSTALL/db-derby-$DERBY_VERSION-bin"
+DERBY_SOURCE="$SOFTWARE_SOURCE/db-derby-$DERBY_VERSION-bin.tar.gz"
+sft_put "derby-$DERBY_VERSION" "tar.gz" "$DERBY_SOURCE" "$DERBY_SOURCE.sha1" "$DERBY_INSTALL"
+env_put "DERBY_HOME" "$DERBY_INSTALL"
+env_append "PATH" ":" "$DERBY_INSTALL/bin"
+
+ECLIPSE_VERSION="juno-SR1"
+ECLIPSE_INSTALL="$SOFTWARE_INSTALL/eclipse"
+ECLIPSE_SOURCE="$SOFTWARE_SOURCE/eclipse-jee-$ECLIPSE_VERSION-linux-gtk-x86_64.tar.gz"
+sft_put "eclipse-$ECLIPSE_VERSION" "tar.gz" "$ECLIPSE_SOURCE" "$ECLIPSE_SOURCE.sha1" "$ECLIPSE_INSTALL"
+env_append "PATH" ":" "$ECLIPSE_INSTALL"
+
+JAVA_VERSION=1.6.0_37
+JAVA_INSTALL="$SOFTWARE_INSTALL/jdk$JAVA_VERSION"
+JAVA_SOURCE="$SOFTWARE_SOURCE/jdk-6u37-linux-x64.tar.gz"
+sft_put "jdk$JAVA_VERSION" "tar.gz" "$JAVA_SOURCE" "$JAVA_SOURCE.sha1" "$JAVA_INSTALL"
+
+JAVA_VERSION=1.7.0_09
+JAVA_INSTALL="$SOFTWARE_INSTALL/jdk$JAVA_VERSION"
+JAVA_SOURCE="$SOFTWARE_SOURCE/jdk-7u9-linux-x64.tar.gz"
+sft_put "jdk$JAVA_VERSION" "tar.gz" "$JAVA_SOURCE" "$JAVA_SOURCE.sha1" "$JAVA_INSTALL"
+env_put "JAVA_HOME" "$JAVA_INSTALL"
+env_append "PATH" ":" "$JAVA_INSTALL/bin"
+
+LUCENE_VERSION=3.6.1
+LUCENE_INSTALL="$SOFTWARE_INSTALL/lucene-$LUCENE_VERSION"
+LUCENE_SOURCE="$SOFTWARE_SOURCE/lucene-$LUCENE_VERSION.tgz"
+sft_put "lucene-$LUCENE_VERSION" "tar.gz" "$LUCENE_SOURCE" "$LUCENE_SOURCE.sha1" "$LUCENE_INSTALL"
+
+MAVEN_VERSION="2.0.11"
+MAVEN_INSTALL="$SOFTWARE_INSTALL/apache-maven-$MAVEN_VERSION"
+MAVEN_SOURCE="$SOFTWARE_SOURCE/apache-maven-$MAVEN_VERSION-bin.tar.gz"
+sft_put "apache-maven-$MAVEN_VERSION" "tar.gz"	"$MAVEN_SOURCE" "$MAVEN_SOURCE.sha1" "$MAVEN_INSTALL"
+
+MAVEN_VERSION="2.2.1"
+MAVEN_INSTALL="$SOFTWARE_INSTALL/apache-maven-$MAVEN_VERSION"
+MAVEN_SOURCE="$SOFTWARE_SOURCE/apache-maven-$MAVEN_VERSION-bin.tar.gz"
+sft_put "apache-maven-$MAVEN_VERSION" "tar.gz"	"$MAVEN_SOURCE" "$MAVEN_SOURCE.sha1" "$MAVEN_INSTALL"
+
+MAVEN_VERSION="3.0.4"
+MAVEN_INSTALL="$SOFTWARE_INSTALL/apache-maven-$MAVEN_VERSION"
+MAVEN_SOURCE="$SOFTWARE_SOURCE/apache-maven-$MAVEN_VERSION-bin.tar.gz"
+sft_put "apache-maven-$MAVEN_VERSION" "tar.gz"	"$MAVEN_SOURCE" "$MAVEN_SOURCE.sha1" "$MAVEN_INSTALL"
+env_put "MAVEN_HOME" "$MAVEN_INSTALL"
+env_append "PATH" ":" "$MAVEN_INSTALL/bin"
+
+RUBYMINE_VERSION="5.0.2"
+RUBYMINE_INSTALL="${SOFTWARE_INSTALL}/RubyMine-${RUBYMINE_VERSION}"
+RUBYMINE_SOURCE="${SOFTWARE_SOURCE}/RubyMine-${RUBYMINE_VERSION}.tar.gz"
+sft_put "rubymine-ide-${RUBYMINE_VERSION}" "tar.gz" "${RUBYMINE_SOURCE}" "${RUBYMINE_SOURCE}.sha1" "${RUBYMINE_INSTALL}"
+env_append "PATH" ":" "${RUBYMINE_INSTALL}/bin"
+
+TOMCAT_VERSION="7.0.32"
+TOMCAT_INSTALL="$SOFTWARE_INSTALL/apache-tomcat-$TOMCAT_VERSION"
+TOMCAT_SOURCE="$SOFTWARE_SOURCE/apache-tomcat-$TOMCAT_VERSION.tar.gz"
+sft_put "apache-tomcat-$TOMCAT_VERSION" "tar.gz" "$TOMCAT_SOURCE" "$TOMCAT_SOURCE.sha1" "$TOMCAT_INSTALL"
+env_put "CATALINA_HOME" "$TOMCAT_INSTALL"
+env_put "CATALINA_PID" "$TOMCAT_INSTALL/work/catalina.pid"
+env_append "PATH" ":" "$TOMCAT_INSTALL/bin"
+

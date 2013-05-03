@@ -1,0 +1,43 @@
+#!/bin/bash
+
+# REDSHELL_MODPROC_NAME - module name
+REDSHELL_MODPROC_NAME="mod_proc"
+
+unset REDSHELL_MODPROC_DEFAULTS
+declare -Ag REDSHELL_MODPROC_DEFAULTS
+REDSHELL_MODPROC_DEFAULTS[is-running-userfile]=/tmp/redshell-$USER-mod_proc-isrunning-userpids
+REDSHELL_MODPROC_DEFAULTS[is-running-namefile]=/tmp/redshell-$USER-mod_proc-isrunning-namepids
+
+function proc_init() {
+	log "${REDSHELL_NAME}" "${REDSHELL_MODPROC_NAME}" "#proc_init"
+}
+
+function proc_is_running() {
+	local PIR_USERNAME=$1
+	local PIR_NAME=$2
+	if [ -z "${PIR_USERNAME}" ]; then
+		log_warn "${REDSHELL_NAME}" "${REDSHELL_MODPROC_NAME}" "#proc_is_running" "unspecified username"
+		return 1
+	fi
+	if [ -z "${PIR_NAME}" ]; then
+		log_warn "${REDSHELL_NAME}" "${REDSHELL_MODPROC_NAME}" "#proc_is_running" "unspecified name"
+		return 1
+	fi
+	local PIR_PID=`ps --no-heading -o user,pid --sort user,pid -C "${PIR_NAME}" |awk "/${PIR_USERNAME}/ { print \\$2 }"`
+	log_debug "${REDSHELL_NAME}" "${REDSHELL_MODPROC_NAME}" "#proc_is_running" "pid=${PIR_PID}"
+	if [ -z "${PIR_PID}" ]; then
+		PROC_IS_RUNNING=false
+		PROC_IS_RUNNING_PID=0
+	else
+		if [ 0 -lt ${PIR_PID} ]; then
+			PROC_IS_RUNNING=true
+			PROC_IS_RUNNING_PID=${PIR_PID}
+		else
+			PROC_IS_RUNNING=false
+			PROC_IS_RUNNING_PID=0
+		fi
+	fi
+}
+
+proc_init
+

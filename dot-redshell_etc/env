@@ -1,0 +1,4 @@
+#!/bin/bash
+
+env_put "host_kaylee"   "172.16.0.2" "true"
+env_put "host_shepherd" "172.16.0.7" "true"

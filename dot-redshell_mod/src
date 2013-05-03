@@ -1,0 +1,285 @@
+#!/bin/bash
+
+REDSHELL_MODSRC_NAME="mod_source"
+REDSHELL_MODSRC_ROOT="$REDSHELL_WORKSPACEROOT/source"
+
+unset WORKSPACE_SOURCE_DEFAULTS
+declare -Ag WORKSPACE_SOURCE_DEFAULTS
+WORKSPACE_SOURCE_DEFAULTS[vcs]="hg"
+WORKSPACE_SOURCE_DEFAULTS[vcs-provider]=""
+WORKSPACE_SOURCE_DEFAULTS[lang]="java"
+WORKSPACE_SOURCE_DEFAULTS[make]="maven"
+
+unset WORKSPACE_SOURCE_HELP
+declare -Ag WORKSPACE_SOURCE_HELP
+WORKSPACE_SOURCE_HELP[bootstrap]="src_bootstrap - bootstrap a new source project; name"
+WORKSPACE_SOURCE_HELP[bld]="src_bld - build a source project; name"
+WORKSPACE_SOURCE_HELP[help]="src_help - display this help"
+WORKSPACE_SOURCE_HELP[put]="src_put - register a project; type/name/url"
+
+unset REDSHELL_MODSRC_DEFINE
+declare -Ag REDSHELL_MODSRC_DEFINE
+REDSHELL_MODSRC_DEFINE[type]="type - a source repository type: svn,hg,git"
+REDSHELL_MODSRC_DEFINE[name]="name - a source project name"
+REDSHELL_MODSRC_DEFINE[url]="url - a source repository url"
+
+unset REDSHELL_REPOSITORIES
+declare -Ag REDSHELL_REPOSITORY_TYPE
+declare -Ag REDSHELL_REPOSITORY_URL
+
+unset REDSHELL_SOURCES
+declare -Ag REDSHELL_SOURCE_REP
+declare -Ag REDSHELL_SOURCE_ROOT
+
+unset REDSHELL_MODSRC_BLDARGS
+declare -Ag REDSHELL_MODSRC_BLDARGS
+
+function src_bootstrap() {
+	local SB_NAME=$1
+	if [ -z "$SB_NAME" ]; then
+		log_warn "source bootstrap" "${WORKSPACE_SOURCE_HELP[bootstrap]}"
+	fi
+}
+
+# log help details for source functions
+function src_help() {
+	local sh_i
+	log "src commands"
+	for sh_i in "${!WORKSPACE_SOURCE_HELP[@]}"
+	do
+		log "${WORKSPACE_SOURCE_HELP[$sh_i]}"
+	done
+
+	log "src definitions"
+	for sh_i in "${!REDSHELL_MODSRC_DEFINE[@]}"
+	do
+		log "${REDSHELL_MODSRC_DEFINE[$sh_i]}"
+	done
+}
+
+# initialize mod_src
+function src_init() {
+	log "$REDSHELL_NAME $REDSHELL_MODSRC_NAME init"
+	if [ ! -e "$REDSHELL_MODSRC_ROOT" ]; then
+		mkdir "$REDSHELL_MODSRC_ROOT"
+	fi
+}
+
+function src_bld() {
+	local SB_KEY=$1
+	if [ -z "$SB_KEY" ]; then
+		log_warn "src bld" "unspecified src"
+		return 1
+	fi
+	local SB_ROOT=${REDSHELL_SOURCE_ROOT[$SB_KEY]}
+	if [ -z "$SB_ROOT" ]; then
+		log_warn "src bld" "unknown source root" "key=$SB_KEY"
+		return 1
+	fi
+	if [ ! -e "$SB_ROOT" ]; then
+		log_warn "src bld" "source root does not exist" "key=$SB_KEY"
+		return 1
+	fi
+	local SB_ARGS=${REDSHELL_MODSRC_BLDARGS[$SB_KEY]}
+	if [ -e "$SB_ROOT/pom.xml" ]; then
+		SB_BINARY=mvn
+		SB_BINARYARGS="-f \"$SB_ROOT/pom.xml\" clean install ${SB_ARGS}"
+	elif [ -e "$SB_ROOT/build.xml" ]; then
+		SB_BINARY=ant
+		SB_BINARYARGS="-f \"$SB_ROOT/build.xml\" ${SB_ARGS}"
+	else
+		log_warn "src bld" "unsupported source project" "key=$SB_KEY"
+		return 1
+	fi
+	eval "${SB_BINARY}" ${SB_BINARYARGS}
+}
+
+# log the source environment including home
+function src_env() {
+	local se_i
+	if [ ! -z "$REDSHELL_SOURCES" ]; then
+		for se_i in $REDSHELL_SOURCES
+		do
+			log "key=$se_i" "repo key=${REDSHELL_SOURCE_REP[$se_i]}" "source root=${REDSHELL_SOURCE_ROOT[$se_i]}" "build args=${REDSHELL_MODSRC_BLDARGS[$se_i]}"
+		done
+	fi
+}
+
+function rep_env() {
+	for k in $REDSHELL_REPOSITORIES
+	do
+		log "key=$k" "type=${REDSHELL_REPOSITORY_TYPE[$k]}" "url=${REDSHELL_REPOSITORY_URL[$k]}"
+	done
+}
+
+function src_get() {
+	SG_KEY=$1
+	if [ -z "$SG_KEY" ]; then
+		log_warn "src get" "unspecified key"
+		return 1
+	fi
+	SG_REPKEY=${REDSHELL_SOURCE_REP[$SG_KEY]}
+	if [ -z "$SG_REPKEY" ]; then
+		log_warn "src get" "unknown repository" "key=$SG_KEY"
+		return 1
+	fi
+	SG_REPTYPE=${REDSHELL_REPOSITORY_TYPE[$SG_REPKEY]}
+	if [ -z "$SG_REPTYPE" ]; then
+		log_warn "src get" "unknown repository type" "key=$SG_KEY" "rep key=$SG_REPKEY"
+		return 1
+	fi
+	SG_ROOT=${REDSHELL_SOURCE_ROOT[$SG_KEY]}
+	if [ -z "$SG_ROOT" ]; then
+		log_warn "src get" "unknown root" "key=$SG_KEY"
+		return 1
+	fi
+	if [ -e "$SG_ROOT" ]; then
+		log_info "src get" "source repository has already been cloned" "root=$SG_ROOT"
+		return 0
+	fi
+	SG_URL="${REDSHELL_REPOSITORY_URL[$SG_REPKEY]}"
+	case "$SG_REPTYPE" in
+		git)
+			src_get_git "$SG_URL" "$SG_ROOT"
+		;;
+		hg)
+			src_get_hg "$SG_URL" "$SG_ROOT"
+		;;
+		svn)
+			src_get_svn "$SG_URL" "$SG_ROOT"
+		;;
+		*)
+			log_warn "src get" "unsupported repository type" "type=$SG_REPTYPE"
+			return 1
+		;;
+	esac
+}
+
+function src_get_git() {
+	SGG_URL=$1
+	SGG_DIR=$2
+	if [ -z "$SGG_URL" ]; then
+		log_warn "src get git" "unspecified url"
+		return 1
+	fi
+	if [ -z "$SGG_DIR" ]; then
+		log_warn "src get git" "unspecified dir"
+		return 1
+	fi
+	log_debug "src get git" "url=$SGG_URL" "dir=$SGG_DIR"
+	SGG_CLONE="git clone \"$SGG_URL\" \"$SGG_DIR\""
+	log_info "src get git" "clone=$SGG_CLONE"
+	eval $SGG_CLONE
+}
+
+function src_get_hg() {
+	SGH_URL=$1
+	SGH_DIR=$2
+	if [ -z "$SGH_URL" ]; then
+		log_warn "src get hg" "unspecified url"
+		return 1
+	fi
+	if [ -z "$SGH_DIR" ]; then
+		log_warn "src get hg" "unspecified dir"
+		return 1
+	fi
+	log_debug "src get hg" "url=$SGH_URL" "dir=$SGH_DIR"
+	SGH_CLONE="hg clone \"$SGH_URL\" \"$SGH_DIR\""
+	log_info "src get hg" "clone=$SGH_CLONE"
+	eval $SGH_CLONE
+}
+
+function src_get_svn() {
+	SGS_URL=$1
+	SGS_DIR=$2
+	if [ -z "$SGS_URL" ]; then
+		log_warn "src get svn" "unspecified url"
+		return 1
+	fi
+	if [ -z "$SGS_DIR" ]; then
+		log_warn "src get svn" "unspecified dir"
+		return 1
+	fi
+	log_debug "src get svn" "url=$SGS_URL" "dir=$SGS_DIR"
+	SGS_CHECKOUT="svn co \"$SGS_URL\" \"$SGS_DIR\""
+	log_info "src get svn" "checkout=$SGS_CHECKOUT"
+	eval $SGS_CHECKOUT
+}
+
+# register a software repository
+# $1 = type [git,hg,svn]
+# $2 = key
+# $3 = url
+function rep_put() {
+	RP_TYPE=$1
+	RP_KEY=$2
+	RP_URL=$3
+	log_debug "rep put" "type=$RP_TYPE" "key=$RP_KEY" "url=$RP_URL"
+	if [ -z "$RP_TYPE" ]; then
+		log_warn "rep put" "no type specified"
+		return 1
+	fi
+	if [ -z "$RP_KEY" ]; then
+		log_warn "rep put" "no key specified"
+		return 1
+	fi
+	if [ -z "$RP_URL" ]; then
+		log_warn "rep put" "no url specified"
+		return 1
+	fi
+	case "$RP_TYPE" in
+		git|hg|svn)
+		;;
+		*)
+			log_warn "rep put" "unsupported repository type:$RP_TYPE"
+			return 1
+		;;
+	esac
+	if [ -z "$REDSHELL_REPOSITORIES" ]; then
+		REDSHELL_REPOSITORIES="$RP_KEY"
+	else
+		REDSHELL_REPOSITORIES="$REDSHELL_REPOSITORIES $RP_KEY"
+	fi
+	unset REDSHELL_REPOSITORY_TYPE[$RP_KEY]
+	REDSHELL_REPOSITORY_TYPE[$RP_KEY]=$RP_TYPE
+	unset REDSHELL_REPOSITORY_URL[$RP_KEY]
+	REDSHELL_REPOSITORY_URL[$RP_KEY]=$RP_URL
+}
+
+function src_put() {
+	local SP_REPKEY=$1
+	local SRCPUT_KEY=$2
+	local SP_BLDARGS=$3
+	log_debug "src put" "rep key=$SP_REPKEY" "key=$SRCPUT_KEY" "build args=$SP_BLDARGS"
+	if [ -z "$SP_REPKEY" ]; then
+		log_warn "src put" "unspecified rep key"
+		return 1
+	fi
+	if [ -z "$SRCPUT_KEY" ]; then
+		log_warn "src put" "unspecified key"
+		return 1
+	fi
+
+	# "clean" up the key
+	SRCPUT_KEY=${SRCPUT_KEY//-/_}
+	SRCPUT_KEY=${SRCPUT_KEY//\./}
+
+	if [ -z	"$REDSHELL_SOURCES" ]; then
+		REDSHELL_SOURCES="$SRCPUT_KEY"
+	else
+		REDSHELL_SOURCES="$REDSHELL_SOURCES $SRCPUT_KEY"
+	fi
+	unset REDSHELL_SOURCE_REP[$SRCPUT_KEY]
+	REDSHELL_SOURCE_REP[$SRCPUT_KEY]=$SP_REPKEY
+	local SP_ROOT="$HOME/Workspace/source/$SP_REPKEY"
+	unset REDSHELL_SOURCE_ROOT[$SRCPUT_KEY]
+	REDSHELL_SOURCE_ROOT[$SRCPUT_KEY]=$SP_ROOT
+	unset REDSHELL_MODSRC_BLDARGS[$SRCPUT_KEY]
+	if [ ! -z "${SP_BLDARGS}" ]; then
+		REDSHELL_MODSRC_BLDARGS[${SRCPUT_KEY}]=${SP_BLDARGS}
+	fi
+	# set an environment variable pointing the src key to the root directory
+	env_put $SRCPUT_KEY $SP_ROOT
+}
+
+src_init

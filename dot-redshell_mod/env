@@ -1,0 +1,80 @@
+#!/bin/bash
+
+# module name
+REDSHELL_MODENV_NAME="mod_environment"
+
+# append to the current environment; look for the value within the variable
+# specified by the key; if it's already there (ie $JAVA_HOME/bin within $PATH)
+# don't specify it again, otherwise append a separator and the value
+function env_append() {
+	local EA_KEY=$1
+	local EA_SEP=$2
+	local EA_VALUE=$3
+	log_debug "environment append:key=$EA_KEY\n\t\tsep=$EA_SEP\n\t\tvalue=$EA_VALUE"
+	if [ -z "$EA_KEY" ]; then
+		export EA_KEY="$EA_VALUE"
+	else
+		# http://tldp.org/LDP/abs/html/ivr.html
+		eval EA_CURRENTVALUE=\$$EA_KEY
+		log_debug "environment append:current value:$EA_CURRENTVALUE"
+		EA_STDOUT=`echo $EA_CURRENTVALUE |grep "$EA_VALUE"`
+		RET=$?
+		log_debug "environment append:std out:$EA_STDOUT"
+		log_debug "environment append:ret=$RET"
+		if [ 1 -eq $RET ]; then
+			export $EA_KEY="$EA_CURRENTVALUE$EA_SEP$EA_VALUE"
+		fi
+	fi
+}
+
+# initialize the module
+function env_init() {
+	log "$REDSHELL_NAME $REDSHELL_MODENV_NAME init"
+}
+
+# prepend to the current environment; look for the value within the variable
+# specified by the key; if it's already there (ie $JAVA_HOME/bin within $PATH)
+# don't specify it again, otherwise prepend the value a separator and the
+# original value
+function env_prepend() {
+	local EP_KEY=$1
+	local EP_SEP=$2
+	local EP_VALUE=$3
+	log_debug "environment prepend:key=$EP_KEY\n\t\tsep=$EP_SEP\n\t\tvalue=$EP_VALUE"
+	if [ -z "$EP_KEY" ]; then
+		export EP_KEY="$EP_VALUE"
+	else
+		# http://tldp.org/LDP/abs/html/ivr.html
+		eval EP_CURRENTVALUE=\$$EP_KEY
+		log_debug "environment prepend:current value:$EP_CURRENTVALUE"
+		EP_STDOUT=`echo $EP_CURRENTVALUE |grep "$EP_VALUE"`
+		RET=$?
+		log_debug "environment prepend:std out:$EP_STDOUT"
+		log_debug "environment prepend:ret=$RET"
+		if [ 1 -eq $RET ]; then
+			export $EP_KEY="$EP_VALUE$EP_SEP$EP_CURRENTVALUE"
+		fi
+	fi
+}
+
+# put a key/value pair into the environment
+function env_put() {
+	local EP_KEY=$1
+	local EP_VALUE=$2
+	local EP_OVERRIDE=$3
+	log_debug "env put" "key=$EP_KEY" "value=$EP_VALUE" "override=$EP_OVERRIDE"
+	# http://tldp.org/LDP/abs/html/ivr.html
+	eval EP_CURRENTVALUE=\$$EP_KEY
+	if [ -n "$EP_CURRENTVALUE" ]; then
+		if [[ ! -z "$EP_OVERRIDE" && "true" == "$EP_OVERRIDE" ]]; then
+			log_info "environment put" "key is already set; overriding" "key=$EP_KEY"
+		else
+			log_info "environment put" "key is already set;" "key=$EP_KEY"
+			return 0
+		fi
+	fi
+	log_debug "environment put" "key=$EP_KEY"
+	export $EP_KEY="$EP_VALUE"
+}
+
+env_init

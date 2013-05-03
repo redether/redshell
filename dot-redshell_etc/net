@@ -1,0 +1,11 @@
+#!/bin/bash
+
+net_put "gateway" "60:2a:d0:83:ad:88" "172.16.0.1"
+net_put "almond" "ff:ff:ff:ff:ff:ff" "255.255.255.255"
+net_put "serenity" "00:18:f3:43:b8:c0" "172.16.0.4"
+net_put "inara" "00:d0:4b:86:98:0d" "172.16.0.5"
+net_put "kaylee" "40:6c:8f:23:76:81" "172.16.0.11"
+net_put "po" "ff:ff:ff:ff:ff:ff" "255.255.255.255"
+net_put "shepherd" "00:1c:c0:bf:6e:37" "172.16.0.7"
+net_put "xbox360" "00:25:ae:79:2f:2d" "255.255.255.255"
+

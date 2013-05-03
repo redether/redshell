@@ -1,0 +1,117 @@
+#!/bin/bash
+
+# module name
+REDSHELL_MODNET_NAME="mod_net"
+
+# a list of pathed networking binaries
+unset NET_BINARY
+declare -Ag NET_BINARY
+NET_BINARY[ifconfig]="`which ifconfig`"
+NET_BINARY[nmap]="`which nmap`"
+
+# a space separated list of network keys (ie host names)
+unset NET_KEY
+# a map of network keys (above) to mac addresses
+declare -Ag NET_MACADDRESS
+# a map of network keys (above) to ip addresses
+declare -Ag NET_IPADDRESS
+# a map of help text for net commands
+declare -Ag NET_HELP
+NET_HELP[put]="net_put - register a network node; host/mac/ip"
+NET_HELP[env]="net_env - display the network environment"
+NET_HELP[wol]="net_wol - issue a wake-on-lan request - https://en.wikipedia.org/wiki/Wake-on-LAN"
+NET_HELP[who]="net_who - issue a whois lookup against a domain; query"
+
+function net_map() {
+	local nm_ifaces="`netstat -i|grep "eth[0-9]*"|awk '{print $1}'`"
+	local nm_file=/tmp/"${USER}-redshell_netmap"
+	if [ -f "${nm_file}" ]; then
+		rm "${nm_file}"
+	fi
+	for if in ${nm_ifaces}
+	do
+		local nm_network="`\"${NET_BINARY[ifconfig]}\" ${if} |grep -o \"Bcast\:[0-9]*\.[0-9]*\.[0-9]*\"|grep -o \"[0-9]*\.[0-9]*\.[0-9]*\"`"
+		"${NET_BINARY[nmap]}" "${nm_network}.0/24" >> ${nm_file} 2>&1
+	done
+	fs_page "${nm_file}"
+}
+
+function net_put() {
+	local NP_KEY=$1
+	local NP_MACADDRESS=$2
+	local NP_IPADDRESS=$3
+	log_debug "net put" "key=$NP_KEY" "mac address=$NP_MACADDRESS"
+
+	if [ -z "$NP_MACADDRESS" ]; then
+		log_warn "net put" "unspecified mac address" "key=$NP_KEY"
+		return 1
+	fi
+	if [ -z "$NP_IPADDRESS" ]; then
+		log_warn "net put" "unspecified ip address" "key=$NP_KEY"
+		return 1
+	fi
+
+	if [ -z "$NET_KEY" ]; then
+		NET_KEY=$NP_KEY
+	else
+		NET_KEY="$NET_KEY $NP_KEY"
+	fi
+
+	unset NET_MACADDRESS[$NP_KEY]
+	NET_MACADDRESS[$NP_KEY]=$NP_MACADDRESS
+
+	unset NET_IPADDRESS[$NP_KEY]
+	NET_IPADDRESS[$NP_KEY]=$NP_IPADDRESS
+}
+
+# display the net environment
+function net_env() {
+	local ne_i
+	for ne_i in $NET_KEY
+	do
+		log "key=$ne_i" "mac=${NET_MACADDRESS[$ne_i]}" "ip=${NET_IPADDRESS[$ne_i]}"
+	done
+}
+
+# display the net help
+function net_help() {
+	for i in "${!NET_HELP[@]}"
+	do
+		log "${NET_HELP[$i]}"
+	done
+}
+
+# initialize the net module
+function net_init() {
+	log "$REDSHELL_NAME $REDSHELL_MODNET_NAME init"
+}
+
+# invoke a wol request
+function net_wol() {
+	NW_NETKEY=$1
+	if [ -z "$NW_NETKEY" ]; then
+		log_warn "net wol" "no key specified"
+		return
+	fi
+	NW_MACADDRESS=${NET_MACADDRESS[$NW_NETKEY]}
+	if [ -z "$NW_MACADDRESS" ]; then
+		log_warn "net wol" "no address for key exists:$NW_NETKEY"
+		return 1
+	fi
+	wakeonlan "$NW_MACADDRESS"
+}
+
+# invoke a whois lookup
+function net_who() {
+	NW_RESULT_PATTERN="Creation\ Date\:|Updated\ Date\:|Expiration\ Date\:|Domain Name\:|Registrar\:|Status\:"
+	NW_QUERY=$1
+	if [ -z "$NW_QUERY" ]; then
+		log_warn "net whois" "no query specified"
+		return
+	fi
+	NW_OUTFILE=/tmp/$USER-net-whois
+	whois -H "$NW_QUERY" > "$NW_OUTFILE" 2>&1
+	less "$NW_OUTFILE"
+}
+
+net_init

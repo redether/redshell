@@ -1,0 +1,31 @@
+#!/bin/bash
+
+rep_put "hg" "bitbucket/rkroeker/rednote" "https://bitbucket.org/rkroeker/rednote"
+src_put "bitbucket/rkroeker/rednote" "rednote"
+
+rep_put "hg" "bitbucket/rkroeker/redshell" "https://bitbucket.org/rkroeker/redshell"
+src_put "bitbucket/rkroeker/redshell" "redshell"
+
+rep_put "hg" "bitbucket/rkroeker/redshell-examples" "https://bitbucket.org/rkroeker/redshell-examples"
+src_put "bitbucket/rkroeker/redshell-examples" "redshell-examples"
+
+rep_put "hg" "bitbucket/rkroeker/redshell/wiki" "https://bitbucket.org/rkroeker/redshell/wiki"
+src_put "bitbucket/rkroeker/redshell/wiki" "redshell/wiki"
+
+rep_put "git" "github/rtomayko/git-sh" "https://github.com/rtomayko/git-sh.git"
+src_put "github/rtomayko/git-sh" "git-sh"
+
+rep_put "svn" "asf/commons/codec/trunk" "http://svn.apache.org/repos/asf/commons/proper/codec/trunk"
+src_put "asf/commons/codec/trunk" "commons-codec"
+
+rep_put "svn" "asf/tomcat/tc7.0.x/tags/TOMCAT_7_0_32" "http://svn.apache.org/repos/asf/tomcat/tc7.0.x/tags/TOMCAT_7_0_32/"
+src_put "asf/tomcat/tc7.0.x/tags/TOMCAT_7_0_32" "tomcat-7.0.32" "clean"
+
+rep_put "svn" "asf/mina/vysper/trunk" "http://svn.apache.org/repos/asf/mina/vysper/trunk"
+src_put "asf/mina/vysper/trunk" "vysper"
+
+rep_put "svn" "asf/mina/mina/trunk" "http://svn.apache.org/repos/asf/mina/mina/trunk"
+src_put "asf/mina/mina/trunk" "mina"
+
+src_get all
+

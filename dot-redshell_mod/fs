@@ -1,0 +1,156 @@
+#!/bin/bash
+
+# REDSHELL_MODFS_NAME - module name
+# REDSHELL_MODFS_ROOT - root directory within which to install software
+REDSHELL_MODFS_NAME="mod_filesystem"
+
+function fs_init() {
+	log "$REDSHELL_NAME $REDSHELL_MODFS_NAME init"
+}
+
+unset REDSHELL_MODFS_BINARY
+declare -Ag REDSHELL_MODFS_BINARY
+REDSHELL_MODFS_BINARY[pager]="`which pager`"
+
+unset REDSHELL_MODFS_DEFAULTS
+declare -Ag REDSHELL_MODFS_DEFAULTS
+REDSHELL_MODFS_DEFAULTS[nfs-mount]="-o soft,intr,rsize=8192,wsize=8192"
+REDSHELL_MODFS_DEFAULTS[mount-secure-binary]="`which truecrypt`"
+REDSHELL_MODFS_DEFAULTS[mount-secure-wait-timeout]=3
+
+unset REDSHELL_MODFS_HELP
+declare -Ag REDSHELL_MODFS_HELP
+REDSHELL_MODFS_HELP[env]="fs_env - display current fs environment (nfs mounts)"
+REDSHELL_MODFS_HELP[help]="fs_help - display this help"
+REDSHELL_MODFS_HELP[fs-is_mounted]="fs_is_mounted - set FS_IS_MOUNTED to [true,false] based upon whether $1 is an fs mount point"
+REDSHELL_MODFS_HELP[fs-mount]="fs_mount - mount an nfs share; ip, path, local path"
+
+function fs_env() {
+	local NFSE_OUT=`mount -l -t nfs`
+	log "$NFSE_OUT"
+}
+
+function fs_help() {
+	for i in "${!REDSHELL_MODFS_HELP[@]}"
+	do
+		log "${REDSHELL_MODFS_HELP[$i]}"
+	done
+}
+
+function fs_is_mounted() {
+	FS_IS_MOUNTED=true
+	local FSIM_MOUNTPATH=$1
+	if [ -z "$FSIM_MOUNTPATH" ]; then
+		log_warn "nfs is mount" "no mount path specified"
+		return 1
+	fi
+	grep $FSIM_MOUNTPATH /proc/mounts > /dev/null 2>&1
+	FSIM_RET=$?
+	if [ 0 -ne $FSIM_RET ]; then
+		FS_IS_MOUNTED=false
+	fi
+}
+
+function fs_mount() {
+	local FSM_MOUNTIP=$1
+	local FSM_MOUNTPATH=$2
+	local FSM_LOCALMOUNTPATH=$3
+	if [ -z "$FSM_MOUNTIP" ]; then
+		log "${REDSHELL_MODFS_HELP[fs-mount]}" "unspecified mount ip"
+		return 1
+	fi
+	if [ -z "$FSM_MOUNTPATH" ]; then
+		log "${REDSHELL_MODFS_HELP[fs-mount]}" "unspecified mount path"
+		return 1
+	fi
+	if [ -z "$FSM_LOCALMOUNTPATH" ]; then
+		log "${REDSHELL_MODFS_HELP[fs-mount]}" "unspecified local mount path"
+		return 1
+	fi
+	if [ ! -e "$FSM_LOCALMOUNTPATH" ]; then
+		mkdir -p "$FSM_LOCALMOUNTPATH"
+	fi
+	log_debug "nfs mount" "ip=$FSM_MOUNT_IP" "path=$FSM_MOUNTPATH" "local path=$FSM_LOCALMOUNTPATH"
+	sudo -k mount ${REDSHELL_MODFS_DEFAULTS[nfs-mount]} $FSM_MOUNTIP:$FSM_MOUNTPATH $FSM_LOCALMOUNTPATH
+}
+
+function fs_mount_secure() {
+	if [ -z "${REDSHELL_MODFS_DEFAULTS[mount-secure-binary]}" ]; then
+		log_warn "${REDSHELL_NAME}" "${REDSHELL_MODFS_NAME}" "#fs_mount_secure" "unspecified secure binary"
+		return 1
+	fi
+	if [ ! -e "${REDSHELL_MODFS_DEFAULTS[mount-secure-binary]}" ]; then
+		log_warn "${REDSHELL_NAME}" "${REDSHELL_MODFS_NAME}" "#fs_mount_secure" "secure binary does not exist"
+		return 1
+	fi
+	if [ ! -x "${REDSHELL_MODFS_DEFAULTS[mount-secure-binary]}" ]; then
+		log_warn "${REDSHELL_NAME}" "${REDSHELL_MODFS_NAME}" "#fs_mount_secure" "secure binary is not executable"
+		return 1
+	fi
+
+	local FSMS_FILE=$1
+	local FSMS_MOUNT=$2
+	if [ -z "${FSMS_FILE}" ]; then
+		log_warn "${REDSHELL_NAME}" "${REDSHELL_MODFS_NAME}" "#fs_mount_secure" "unspecified file"
+		return 2
+	fi
+	if [ ! -e "${FSMS_FILE}" ]; then
+		log_warn "${REDSHELL_NAME}" "${REDSHELL_MODFS_NAME}" "#fs_mount_secure" "file does not exist" "file=${FSMS_FILE}"
+		return 2
+	fi
+	if [ ! -f "${FSMS_FILE}" ]; then
+		log_warn "${REDSHELL_NAME}" "${REDSHELL_MODFS_NAME}" "#fs_mount_secure" "not a file" "file=${FSMS_FILE}"
+		return 2
+	fi
+	if [ -z "${FSMS_MOUNT}" ]; then
+		log_warn "${REDSHELL_NAME}" "${REDSHELL_MODFS_NAME}" "#fs_mount_secure" "unspecified mount"
+		return 2
+	fi
+	if [ ! -e "${FSMS_MOUNT}" ]; then
+		log_warn "${REDSHELL_NAME}" "${REDSHELL_MODFS_NAME}" "#fs_mount_secure" "mount does not exist" "mount=${FSMS_MOUNT}"
+		return 2
+	fi
+	if [ ! -d "${FSMS_MOUNT}" ]; then
+		log_warn "${REDSHELL_NAME}" "${REDSHELL_MODFS_NAME}" "#fs_mount_secure" "mount is not a directory" "mount=${FSMS_MOUNT}"
+		return 2
+	fi
+	local FSMS_MOUNTCOUNT=`ls -1 "${FSMS_MOUNT}" |wc -l`
+	if [ 0 -lt ${FSMS_MOUNTCOUNT} ]; then
+		log_warn "${REDSHELL_NAME}" "${REDSHELL_MODFS_NAME}" "#fs_mount_secure" "mount is not empty" "mount=${FSMS_MOUNT}" "count=${FSMS_MOUNTCOUNT}"
+		return 2
+	fi
+
+	local FSMS_COMMAND="\"${REDSHELL_MODFS_DEFAULTS[mount-secure-binary]}\" --mount \"${FSMS_FILE}\" \"${FSMS_MOUNT}\""
+	log_debug "${REDSHELL_NAME}" "${REDSHELL_MODFS_NAME}" "#fs_mount_secure" "command=${FSMS_COMMAND}"
+	eval $FSMS_COMMAND
+	fs_is_mounted "${FSMS_MOUNT}"
+	while [ true != $FS_IS_MOUNTED ]
+	do
+		sleep 1s
+		fs_is_mounted
+		local i=$((i + 1))
+		if [ $i -gt ${REDSHELL_MODFS_DEFAULTS[mount-secure-wait-timeout]} ]; then
+			break
+		fi
+	done
+	fs_is_mounted
+	if [ true != $FS_IS_MOUNTED ]; then
+		log_error "${REDSHELL_NAME}" "${REDSHELL_MODFS_NAME}" "cannot mount secure file" "file=${FSMS_FILE}" "mount=${FSMS_MOUNT}"
+		return 3
+	fi
+}
+
+function fs_page() {
+	local fsp_file="${1}"
+	if [ -z "${fsp_file}" ]; then
+		log_warn "${REDSHELL_NAME}" "${REDSHELL_MODFS_NAME}" "#fs_page" "unspecified file"
+		return 1
+	fi
+	if [ ! -f "${fsp_file}" ]; then
+		log_warn "${REDSHELL_NAME}" "${REDSHELL_MODFS_NAME}" "#fs_page" "not a file"
+		return 1
+	fi
+	eval "${REDSHELL_MODFS_BINARY[pager]}" "${fsp_file}"
+}
+
+fs_init

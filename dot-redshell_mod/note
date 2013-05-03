@@ -1,0 +1,160 @@
+#!/bin/bash
+
+# REDSHELL_MODNOTE_NAME - module name
+REDSHELL_MODNOTE_NAME="mod_note"
+
+unset REDSHELL_MODNOTE_DEFAULTS
+declare -Ag REDSHELL_MODNOTE_DEFAULTS
+REDSHELL_MODNOTE_DEFAULTS[root]="${HOME}/Workspace/notes/tomboy"
+REDSHELL_MODNOTE_DEFAULTS[secure-file]="${HOME}/Dropbox/Notes/tomboy"
+REDSHELL_MODNOTE_DEFAULTS[secure-mount]="${HOME}/Workspace/notes/tomboy-sync"
+REDSHELL_MODNOTE_DEFAULTS[note-binary]="`which tomboy`"
+REDSHELL_MODNOTE_DEFAULTS[note-binary-process-name]="tomboy"
+
+function note_env() {
+	local NE_COUNT=`ls -1 "${REDSHELL_MODNOTE_DEFAULTS[root]}/" |grep "\.note" |wc -l`
+	log "${REDSHELL_NAME}" "${REDSHELL_MODNOTE_NAME}" "#note_env" "root=${REDSHELL_MODNOTE_DEFAULTS[root]}" "${NE_COUNT} note(s)"
+	log "${REDSHELL_NAME}" "${REDSHELL_MODNOTE_NAME}" "#note_env" "secure file=${REDSHELL_MODNOTE_DEFAULTS[secure-file]}"
+	log "${REDSHELL_NAME}" "${REDSHELL_MODNOTE_NAME}" "#note_env" "secure mount=${REDSHELL_MODNOTE_DEFAULTS[secure-mount]}"
+}
+
+function note_init() {
+	log "${REDSHELL_NAME}" "${REDSHELL_MODNOTE_NAME}" "#note_init"
+	# verify that root, secure file and secure mount are set
+	if [ -z "${REDSHELL_MODNOTE_DEFAULTS[root]}" ]; then
+		log "${REDSHELL_NAME}" "${REDSHELL_MODNOTE_NAME}" "#note_init" "root is unspecified; please initialize then continue @note_env"
+		return 1
+	fi
+	if [ -z "${REDSHELL_MODNOTE_DEFAULTS[secure-file]}" ]; then
+		log "${REDSHELL_NAME}" "${REDSHELL_MODNOTE_NAME}" "secure file is unspecified; please initialize then continue @note_env"
+		return 1
+	fi
+	if [ -z "${REDSHELL_MODNOTE_DEFAULTS[secure-mount]}" ]; then
+		log "${REDSHELL_NAME}" "${REDSHELL_MODNOTE_NAME}" "secure mount is unspecified; please initialize then continue @note_env"
+		return 1
+	fi
+	# verify that the root (working directory)
+	#   exists
+	#   is a directory
+	if [ -e "${REDSHELL_MODNOTE_DEFAULTS[root]}" ]; then
+		if [ ! -d "${REDSHELL_MODNOTE_DEFAULTS[root]}" ]; then
+			log "${REDSHELL_NAME}" "${REDSHELL_MODNOTE_NAME}" "root is not a directory; please initialize then continue @note_env" "secure file=${REDSHELL_MODNOTE_DEFAULTS[root]}"
+			return 1
+		fi
+	else
+		mkdir -p "${REDSHELL_MODNOTE_DEFAULTS[root]}"
+		local NI_RET=$?
+		if [ 0 -ne ${NI_RET} ]; then
+			log "${REDSHELL_NAME}" "${REDSHELL_MODNOTE_NAME}" "root cannot be created; please initialize then continue @note_env" "secure file=${REDSHELL_MODNOTE_DEFAULTS[root]}"
+			return 1
+		fi
+	fi
+	# verify that the file (to mount)
+	#   exists
+	#   is a file
+	if [ -e "${REDSHELL_MODNOTE_DEFAULTS[secure-file]}" ]; then
+		if [ ! -f "${REDSHELL_MODNOTE_DEFAULTS[secure-file]}" ]; then
+			log "${REDSHELL_NAME}" "${REDSHELL_MODNOTE_NAME}" "secure file is not a file; please initialize then continue @note_env" "secure file=${REDSHELL_MODNOTE_DEFAULTS[secure-file]}"
+			return 1
+		fi
+	else
+		log "${REDSHELL_NAME}" "${REDSHELL_MODNOTE_NAME}" "secure file does not exist; please initialize then continue @note_env" "secure file=${REDSHELL_MODNOTE_DEFAULTS[secure-file]}"
+		return 1
+	fi
+	fs_is_mounted "${REDSHELL_MODNOTE_DEFAULTS[secure-mount]}"
+	if [ false == ${FS_IS_MOUNTED} ]; then
+		# verify that the mount point
+		#   exists
+		#   is a directory
+		#   is empty
+		if [ -e "${REDSHELL_MODNOTE_DEFAULTS[secure-mount]}" ]; then
+			if [ ! -d "${REDSHELL_MODNOTE_DEFAULTS[secure-mount]}" ]; then
+				log "${REDSHELL_NAME}" "${REDSHELL_MODNOTE_NAME}" "secure mount is not a directory; please initialize then continue @note_env" "secure file=${REDSHELL_MODNOTE_DEFAULTS[secure-mount]}"
+				return 1
+			else
+				local NI_SMCOUNT=`ls -1 "${REDSHELL_MODNOTE_DEFAULTS[secure-mount]}" |wc -l`
+				if [ 0 -ne ${NI_SMCOUNT} ]; then
+					log "${REDSHELL_NAME}" "${REDSHELL_MODNOTE_NAME}" "secure mount is not empty; please initialize then continue @note_env" "secure file=${REDSHELL_MODNOTE_DEFAULTS[secure-mount]}"
+					return 1
+				fi
+			fi
+		else
+			mkdir -p "${REDSHELL_MODNOTE_DEFAULTS[secure-mount]}"
+			local NI_RET=$?
+			if [ 0 -ne ${NI_RET} ]; then
+				log "${REDSHELL_NAME}" "${REDSHELL_MODNOTE_NAME}" "secure mount cannot be created; please initialize then continue @note_env" "secure file=${REDSHELL_MODNOTE_DEFAULTS[secure-mount]}"
+				return 1
+			fi
+		fi
+		# mount secure file to secure mount
+		fs_mount_secure "${REDSHELL_MODNOTE_DEFAULTS[secure-file]}" "${REDSHELL_MODNOTE_DEFAULTS[secure-mount]}"
+	fi
+	# verify that secure mount is actually mounted
+	fs_is_mounted "${REDSHELL_MODNOTE_DEFAULTS[secure-mount]}"
+	if [ false == ${FS_IS_MOUNTED} ]; then
+		log "${REDSHELL_NAME}" "${REDSHELL_MODNOTE_NAME}" "secure file is not mounted"
+		return 1
+	fi
+	# check that the binary is running
+	note_proc_is_running "${USER}" "${REDSHELL_MODNOTE_DEFAULTS[note-binary-process-name]}"
+	if [ false == ${NOTE_PROC_IS_RUNNING} ]; then
+		nohup ${REDSHELL_MODNOTE_DEFAULTS[note-binary]} --note-path ${REDSHELL_MODNOTE_DEFAULTS[root]} --search 1>/dev/null 2>&1 &
+	fi
+}
+
+function note_create() {
+	note_proc_is_running "${USER}" "${REDSHELL_MODNOTE_DEFAULTS[note-binary-process-name]}"
+	if [ -z "${NOTE_PROC_IS_RUNNING}" ]; then
+		log_warn "${REDSHELL_NAME}" "${REDSHELL_MODNOTE_NAME}" "#note_open" "note process is not running"
+		return 1
+	elif [ false == ${NOTE_PROC_IS_RUNNING} ]; then
+		log_warn "${REDSHELL_NAME}" "${REDSHELL_MODNOTE_NAME}" "#note_open" "note process is not running"
+		return 1
+	fi
+	nohup ${REDSHELL_MODNOTE_DEFAULTS[note-binary]} --new-note 1>/dev/null 2>&1 &
+}
+
+function note_open() {
+	note_proc_is_running "${USER}" "${REDSHELL_MODNOTE_DEFAULTS[note-binary-process-name]}"
+	if [ -z "${NOTE_PROC_IS_RUNNING}" ]; then
+		log_warn "${REDSHELL_NAME}" "${REDSHELL_MODNOTE_NAME}" "#note_open" "note process is not running"
+		return 2
+	elif [ false == ${NOTE_PROC_IS_RUNNING} ]; then
+		log_warn "${REDSHELL_NAME}" "${REDSHELL_MODNOTE_NAME}" "#note_open" "note process is not running"
+		return 2
+	fi
+	local NO_TITLE=$1
+	if [ -z "$NO_TITLE" ]; then
+		log_warn "${REDSHELL_NAME}" "${REDSHELL_MODNOTE_NAME}" "#note_open" "unspecified title"
+		return 1
+	fi
+	nohup ${REDSHELL_MODNOTE_DEFAULTS[note-binary]} --open-note "${NO_TITLE}" 1>/dev/null 2>&1 &
+}
+
+function note_proc_is_running() {
+	local PIR_USERNAME=$1
+	local PIR_NAME=$2
+	if [ -z "${PIR_USERNAME}" ]; then
+		log_warn "${REDSHELL_NAME}" "${REDSHELL_MODPROC_NAME}" "#proc_is_running" "unspecified username"
+		return 1
+	fi
+	if [ -z "${PIR_NAME}" ]; then
+		log_warn "${REDSHELL_NAME}" "${REDSHELL_MODPROC_NAME}" "#proc_is_running" "unspecified name"
+		return 1
+	fi
+	local PIR_PID=`ps --no-heading -o user,pid --sort user,pid -C "${PIR_NAME}" |awk "/${PIR_USERNAME}/ { print \\$2 }"`
+	log_debug "${REDSHELL_NAME}" "${REDSHELL_MODPROC_NAME}" "#proc_is_running" "pid=${PIR_PID}"
+	NOTE_PROC_IS_RUNNING=false
+	NOTE_PROC_IS_RUNNING_PID=0
+	if [ ! -z "${PIR_PID}" ]; then
+		if [ 0 -lt ${PIR_PID} ]; then
+			NOTE_PROC_IS_RUNNING=true
+			NOTE_PROC_IS_RUNNING_PID=${PIR_PID}
+		else
+			NOTE_PROC_IS_RUNNING=false
+			NOTE_PROC_IS_RUNNING_PID=0
+		fi
+	fi
+}
+
+note_init

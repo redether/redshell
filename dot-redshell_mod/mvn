@@ -1,0 +1,158 @@
+#!/bin/bash
+
+REDSHELL_MODMVN_NAME="mod_maven"
+
+unset REDSHELL_MODMVN_DEFAULTS
+declare -Ag REDSHELL_MODMVN_DEFAULTS
+REDSHELL_MODMVN_DEFAULTS[report-files]="target/surefire-reports/*.txt target/failsafe-reports/*.txt"
+
+unset REDSHELL_MODMVN_HELP
+declare -Ag REDSHELL_MODMVN_HELP
+REDSHELL_MODMVN_HELP[bootstrap]="mvn_bootstrap - bootstrap a maven project using the archetype plugin"
+REDSHELL_MODMVN_HELP[env]="mvn_env - display the maven environment"
+REDSHELL_MODMVN_HELP[help]="mvn_help - display this help"
+REDSHELL_MODMVN_HELP[report]="mvn_report - report unit/integration test results"
+REDSHELL_MODMVN_HELP[report_error]="mvn_report_error - report unit/integration test result errors"
+REDSHELL_MODMVN_HELP[report_fail]="mvn_report_fail - report unit/integration test result failures"
+
+function mvn_bootstrap() {
+	# http://maven.apache.org/guides/introduction/introduction-to-archetypes.html
+	# http://maven.apache.org/archetype/maven-archetype-plugin/generate-mojo.html
+	MB_ARCHETYPE=$1
+	if [ -z "$MB_ARCHETYPE" ]; then
+		MB_CMD="mvn archetype:generate -DarchetypeCatalog=internal"
+	else
+		case "$MB_ARCHETYPE" in
+			default)
+			MB_CMD="mvn archetype:generate -DarchetypeGroupId=org.apache.maven.archetypes -DarchetypeArtifactId=maven-archetype-simple"
+			;;
+			web)
+			MB_CMD="mvn archetype:generate -DarchetypeGroupId=org.apache.maven.archetypes -DarchetypeArtifactId=maven-archetype-webapp"
+			;;
+		esac
+	fi
+	if [ -z "$MB_CMD" ]; then
+		log_warn "maven bootstrap" "unspecified archetype"
+		return 1
+	else
+		log "maven bootstrap" "$MB_CMD"
+		eval $MB_CMD
+	fi
+}
+
+# log help details for maven functions
+function mvn_help() {
+	for i in "${!REDSHELL_MODMVN_HELP[@]}"
+	do
+		log "${REDSHELL_MODMVN_HELP[$i]}"
+	done
+}
+
+# log the maven environment including home
+function mvn_env() {
+	log "JAVA_HOME:$JAVA_HOME"
+	log "MAVEN_HOME:$MAVEN_HOME"
+}
+
+function mvn_report() {
+	mvn_analyze "unit" "error"
+	mvn_analyze "unit" "failure"
+	mvn_analyze "integration" "error"
+	mvn_analyze "integration" "failure"
+	local MR_1=$1
+	local MR_NODEDIT=false
+	while [ ! -z "$MR_1" ];
+	do
+		if [ "$MR_1" == "--noedit" ]; then
+			MR_NODEDIT=true
+		fi
+		shift
+		MR_1=$1
+	done
+	log_debug "$REDSHELL_NAME" "$REDSHELL_MODMVN_NAME" "mvn report" "$MR_NOEDIT"
+	if [ false == $MR_NODEDIT ]; then
+		local MR_FILES
+		for p in unit integration
+		do
+			for t in error failure
+			do
+				local MR_FILE="/tmp/mod_maven-${p}-${t}-${USER}"
+				if [ -s "$MR_FILE" ]; then
+					if [ -z "$MR_FILES" ]; then
+						MR_FILES="$MR_FILE"
+					else
+						MR_FILES="$MR_FILES $MR_FILE"
+					fi
+				fi
+			done
+		done
+		if [ ! -z "$MR_FILES" ]; then
+			log_debug "mvn report" "files=${MR_FILES}"
+			edit_files "${MR_FILES}"
+		fi
+	fi
+}
+
+function mvn_analyze() {
+	local MA_PHASE=$1	# [integration,unit]
+	if [ -z "$MA_PHASE" ]; then
+		log_warn "mvn analyze" "unspecified phase [integration,unit]"
+		return 1
+	fi
+	local MA_TYPE=$2	# [error,failure]
+	if [ -z "$MA_TYPE" ]; then
+		log_warn "mvn analyze" "unspecified type [error,failure]"
+		return 1
+	fi
+	local MA_PLUGIN
+	case "$MA_PHASE" in
+		integration)
+			MA_PLUGIN="failsafe"
+		;;
+		unit)
+			MA_PLUGIN="surefire"
+		;;
+	esac
+	local MA_FILEPATTERN="*/${MA_PLUGIN}-reports/*.txt"
+	log_debug "mvn analyze" "file pattern=${MA_FILEPATTERN}"
+	local MA_PATTERN
+	case "$MA_TYPE" in
+		error)
+			MA_PATTERN="Errors: [1-9]"
+		;;
+		failure)
+			MA_PATTERN="Failures: [1-9]"
+		;;
+	esac
+
+	local MA_FILE="/tmp/mod_maven-${MA_PHASE}-${MA_TYPE}-${USER}"
+	log_debug "mvn analyze" "file=$MA_FILE"
+	MA_REPORTFILECOUNT=`ls -1 ${MA_FILEPATTERN} 2>/dev/null |wc -l`
+	log_debug "mvn analyze" "report file count=${MA_REPORTFILECOUNT}"
+	if [ 0 -lt ${MA_REPORTFILECOUNT} ]; then
+		# loop over all files in the reports directory and build a single file
+		# containing an aggregation of the individual files
+		for f in ${MA_FILEPATTERN}
+		do
+			grep --quiet "$MA_PATTERN" "$f"
+			local MA_RET=$?
+			if [ 0 -eq $MA_RET ]; then
+				cat "$f" >> "$MA_FILE"
+			fi
+		done
+		if [ -s "$MA_FILE" ]; then
+			log "$REDSHELL_NAME $REDSHELL_MODMVN_NAME ${MA_PLUGIN} ${MA_TYPE}s"
+		else
+			log "$REDSHELL_NAME $REDSHELL_MODMVN_NAME no ${MA_PLUGIN} ${MA_TYPE}s"
+		fi
+	else
+		log "$REDSHELL_NAME $REDSHELL_MODMVN_NAME no ${MA_PLUGIN} tests"
+	fi
+}
+
+function mvn_init() {
+	log "$REDSHELL_NAME $REDSHELL_MODMVN_NAME init"
+}
+
+mvn_init
+
